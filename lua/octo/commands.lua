@@ -872,6 +872,9 @@ function M.setup()
       delete = function()
         M.delete_comment()
       end,
+      qf = function(pr_number)
+        require("octo.comments_qf").load(pr_number)
+      end,
     },
     label = {
       create = function(label)
