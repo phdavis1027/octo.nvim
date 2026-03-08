@@ -201,10 +201,21 @@ function M.resolve()
     on_stdout = function()
       thread.resolved = true
       vim.schedule(function()
+        table.remove(M._threads, idx)
+        local qf_items = vim.fn.getqflist()
+        table.remove(qf_items, idx)
+        vim.fn.setqflist({}, "r", {
+          title = "PR #" .. M._pr .. " comments",
+          items = qf_items,
+        })
+        local remaining = #M._threads
         vim.notify(
-          string.format("Resolved: %s:%d", thread.path, tonumber(thread.lnum) or 0),
+          string.format("Resolved: %s:%d  (%d remaining)", thread.path, tonumber(thread.lnum) or 0, remaining),
           vim.log.levels.INFO
         )
+        if remaining == 0 then
+          vim.cmd "cclose"
+        end
       end)
     end,
     on_stderr = function(_, data)
