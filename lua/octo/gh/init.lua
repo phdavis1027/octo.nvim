@@ -36,6 +36,9 @@ local env_vars = {
   no_proxy = vim.env["no_proxy"],
   SSH_AUTH_SOCK = vim.env["SSH_AUTH_SOCK"],
   DBUS_SESSION_BUS_ADDRESS = vim.env["DBUS_SESSION_BUS_ADDRESS"],
+  XDG_RUNTIME_DIR = vim.env["XDG_RUNTIME_DIR"],
+  DISPLAY = vim.env["DISPLAY"],
+  WAYLAND_DISPLAY = vim.env["WAYLAND_DISPLAY"],
 }
 
 local function get_env()
