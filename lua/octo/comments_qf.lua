@@ -6,6 +6,7 @@ local M = {}
 M._threads = {}
 M._repo = nil
 M._pr = nil
+M._reviewers = {}
 
 local ns = vim.api.nvim_create_namespace "octo_comments_qf"
 
@@ -52,6 +53,11 @@ local function graphql_query(pr_number)
 query {
   repository(owner: "%s", name: "%s") {
     pullRequest(number: %s) {
+      reviews(first: 50, states: [CHANGES_REQUESTED, COMMENTED]) {
+        nodes {
+          author { login }
+        }
+      }
       reviewThreads(first: 100) {
         nodes {
           id
@@ -110,7 +116,18 @@ function M.load(pr_number)
         return
       end
 
-      local threads = parsed.data.repository.pullRequest.reviewThreads.nodes
+      local pr_data = parsed.data.repository.pullRequest
+      local seen = {}
+      M._reviewers = {}
+      for _, review in ipairs(pr_data.reviews.nodes) do
+        local login = review.author and review.author.login
+        if login and not seen[login] then
+          seen[login] = true
+          table.insert(M._reviewers, login)
+        end
+      end
+
+      local threads = pr_data.reviewThreads.nodes
       M._threads = {}
       local items = {}
 
@@ -265,6 +282,7 @@ function M.resolve()
           clear_virtual_comments()
           pcall(vim.api.nvim_del_augroup_by_name, "OctoCommentsQF")
           vim.cmd "cclose"
+          M.rerequest_review()
         end
       end)
     end,
@@ -275,6 +293,34 @@ function M.resolve()
           vim.notify("Resolve failed: " .. err, vim.log.levels.ERROR)
         end)
       end
+    end,
+  })
+end
+
+function M.rerequest_review()
+  if #M._reviewers == 0 then
+    return
+  end
+  local gh_cmd = config.values and config.values.gh_cmd or "gh"
+  local reviewers = table.concat(M._reviewers, ",")
+  local cmd = { gh_cmd, "pr", "edit", M._pr, "--add-reviewer", reviewers }
+
+  vim.fn.jobstart(cmd, {
+    stdout_buffered = true,
+    on_exit = function(_, code)
+      vim.schedule(function()
+        if code == 0 then
+          vim.notify(
+            string.format("Re-requested review from: %s", reviewers),
+            vim.log.levels.INFO
+          )
+        else
+          vim.notify(
+            string.format("Failed to re-request review from: %s", reviewers),
+            vim.log.levels.ERROR
+          )
+        end
+      end)
     end,
   })
 end
