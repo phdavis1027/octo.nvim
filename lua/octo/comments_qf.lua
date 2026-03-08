@@ -40,6 +40,15 @@ query {
 end
 
 function M.load(pr_number)
+  if not pr_number or pr_number == "" then
+    vim.ui.input({ prompt = "PR number: " }, function(input)
+      if input and input ~= "" then
+        M.load(input)
+      end
+    end)
+    return
+  end
+
   local gh_cmd = config.values and config.values.gh_cmd or "gh"
   M._repo = vim.trim(vim.fn.system(gh_cmd .. " repo view --json nameWithOwner -q .nameWithOwner"))
   if vim.v.shell_error ~= 0 then
