@@ -7,6 +7,44 @@ M._threads = {}
 M._repo = nil
 M._pr = nil
 
+local ns = vim.api.nvim_create_namespace "octo_comments_qf"
+
+local function place_virtual_comments(threads)
+  vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
+  local bufs_by_path = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) then
+      local name = vim.api.nvim_buf_get_name(buf)
+      bufs_by_path[name] = buf
+    end
+  end
+
+  local cwd = vim.fn.getcwd() .. "/"
+  for _, thread in ipairs(threads) do
+    local abs = cwd .. thread.path
+    local buf = bufs_by_path[abs]
+    if buf then
+      local line = thread.lnum - 1
+      local line_count = vim.api.nvim_buf_line_count(buf)
+      if line >= 0 and line < line_count then
+        local short = thread.body:gsub("\n", " "):sub(1, 80)
+        vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
+          virt_text = { { " >> " .. short, "DiagnosticWarn" } },
+          virt_text_pos = "eol",
+        })
+      end
+    end
+  end
+end
+
+local function clear_virtual_comments()
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) then
+      vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    end
+  end
+end
+
 local function graphql_query(pr_number)
   local owner, name = M._repo:match("^(.+)/(.+)$")
   return string.format(
@@ -119,6 +157,15 @@ function M.load(pr_number)
           M.resolve()
         end, { buffer = qf_buf, desc = "Resolve thread" })
 
+        place_virtual_comments(M._threads)
+
+        vim.api.nvim_create_autocmd("BufEnter", {
+          group = vim.api.nvim_create_augroup("OctoCommentsQF", { clear = true }),
+          callback = function()
+            place_virtual_comments(M._threads)
+          end,
+        })
+
         vim.notify(
           string.format("Loaded %d unresolved comments from PR #%s  |  p=preview  R=resolve", #items, pr_number),
           vim.log.levels.INFO
@@ -213,7 +260,10 @@ function M.resolve()
           string.format("Resolved: %s:%d  (%d remaining)", thread.path, tonumber(thread.lnum) or 0, remaining),
           vim.log.levels.INFO
         )
+        place_virtual_comments(M._threads)
         if remaining == 0 then
+          clear_virtual_comments()
+          pcall(vim.api.nvim_del_augroup_by_name, "OctoCommentsQF")
           vim.cmd "cclose"
         end
       end)
